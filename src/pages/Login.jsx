@@ -1,0 +1,234 @@
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { authAPI } from '../api/axios';
+import { Alert } from '../components/Common';
+
+const Login = () => {
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('STUDENT');
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      console.log('🔷 LOGIN ATTEMPT');
+      console.log('📧 Email:', formData.email);
+      console.log('🔐 Password:', formData.password);
+      console.log('👤 Role:', selectedRole);
+      
+      const loginData = {
+        ...formData,
+        role: selectedRole
+      };
+      
+      console.log('📤 Sending login request with data:', loginData);
+      
+      const response = await authAPI.login(loginData);
+      
+      console.log('✅ LOGIN SUCCESSFUL');
+      console.log('📥 Full Response:', response);
+      console.log('📋 Response data:', response.data);
+      
+      // Handle different response structures
+      let token, user;
+      
+      if (response.data.user) {
+        // Structure: { token: "...", user: { name, id, role } }
+        token = response.data.token;
+        user = response.data.user;
+        console.log('✓ Response structure: has user object');
+      } else if (response.data.name && response.data.id) {
+        // Structure: { token: "...", name, id, role } (user props at root)
+        token = response.data.token || response.data.accessToken;
+        user = {
+          name: response.data.name,
+          id: response.data.id,
+          role: response.data.role || selectedRole
+        };
+        console.log('✓ Response structure: user props at root level');
+      } else {
+        // Fallback or other structure
+        token = response.data.token || response.data.accessToken;
+        user = response.data;
+        console.log('✓ Response structure: fallback/unknown');
+      }
+      
+      console.log('🎫 Token:', token);
+      console.log('👤 User:', user);
+
+      if (!token) {
+        throw new Error('No token received from backend');
+      }
+      if (!user || !user.name || !user.id) {
+        throw new Error('Invalid user data received from backend: ' + JSON.stringify(user));
+      }
+
+      // Store auth data
+      login(token, user.name, user.id, user.role || 'STUDENT');
+      
+      console.log('💾 Auth data stored successfully');
+
+      // Redirect based on role
+      const redirectRole = user.role || selectedRole;
+      if (redirectRole === 'ADMIN') {
+        console.log('🚀 Redirecting to admin dashboard');
+        navigate('/admin/dashboard');
+      } else {
+        console.log('🚀 Redirecting to student dashboard');
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      console.error('❌ LOGIN ERROR');
+      console.error('Error type:', err.constructor.name);
+      console.error('Error message:', err.message);
+      console.error('Full error object:', err);
+      console.error('Response status:', err.response?.status);
+      console.error('Response data:', err.response?.data);
+      console.error('Request config:', err.config);
+      
+      const errorMessage = err.response?.data?.message || 
+                          err.response?.data?.error || 
+                          err.message || 
+                          'Login failed. Please try again.';
+      
+      console.error('Final error message:', errorMessage);
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-md p-8">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-blue-600 mb-2">CCB</h1>
+          <h2 className="text-2xl font-bold text-gray-900">Welcome Back</h2>
+          <p className="text-gray-600 mt-2">College Complaint Box Management System</p>
+        </div>
+
+        {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+
+        {/* Role Selection Buttons */}
+        <div className="mb-6 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setSelectedRole('STUDENT')}
+            className={`flex-1 py-2 px-4 rounded-lg font-semibold transition ${
+              selectedRole === 'STUDENT'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            👨‍🎓 Student
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedRole('ADMIN')}
+            className={`flex-1 py-2 px-4 rounded-lg font-semibold transition ${
+              selectedRole === 'ADMIN'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            👨‍💼 Admin
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email Address
+            </label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+              placeholder={selectedRole === 'ADMIN' ? 'admin@example.com' : 'student@example.com'}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600 hover:text-gray-900 transition"
+              >
+                {showPassword ? (
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                    <path d="M15.171 13.576l1.414 1.414a1 1 0 00.707-.293l-1.414-1.414-.707.293zM12.191 11.2l1.414 1.414c.195-.195.366-.405.51-.629L11.562 10.59c.224.145.434.315.629.51zM10 15a5 5 0 01-4.576-2.336l1.141 1.141A3 3 0 0010 15z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {loading && <span className="animate-spin mr-2">⟳</span>}
+            {loading ? 'Signing in...' : `Sign In as ${selectedRole === 'ADMIN' ? 'Admin' : 'Student'}`}
+          </button>
+        </form>
+
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <p className="text-center text-gray-600">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-blue-600 font-semibold hover:underline">
+              Register here
+            </Link>
+          </p>
+        </div>
+
+        <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <p className="text-xs text-gray-600">
+            <span className="font-semibold">Demo Credentials:</span>
+            <br />
+            Student: student@example.com / password
+            <br />
+            Admin: admin@example.com / password
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Login;
